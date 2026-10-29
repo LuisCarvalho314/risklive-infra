@@ -64,8 +64,9 @@ preservation of the production-linked object store.
    installation and can be bypassed. New scanner detects common provider tokens,
    private keys, Azure connection secrets, bcrypt hashes, non-placeholder secret
    assignments, risky index modes and sensitive artifact paths. It reports only
-   rule names and file paths/object IDs. Integration should invoke it from the
-   hook and non-deploying CI after reviewing all new paths. Enable hosted secret
+   rule names and file paths/object IDs. Integration now invokes the indexed scanner from the
+   hook after reviewing all new paths. Non-deploying hosted CI enforcement remains
+   a future change. Enable hosted secret
    scanning/push protection where available and review branch protections with
    operator approval; no settings were changed here.
 
