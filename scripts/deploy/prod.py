@@ -85,6 +85,9 @@ def verify_images(candidate, model):
         metadata = json.loads(run(['docker', 'image', 'inspect', image]))[0]
         labels = metadata.get('Config', {}).get('Labels') or {}
         require(labels.get('org.opencontainers.image.revision') == candidate['source']['revision'], 'Pulled image source provenance mismatch')
+        require(image in metadata.get('RepoDigests', []), 'Pulled image digest identity mismatch')
+        if role == 'app':
+            require(labels.get('io.risklive.seca.revision') == candidate['source']['seca_revision'], 'Pulled app SECA provenance mismatch')
         require(labels.get('org.opencontainers.image.source') == 'https://github.com/LuisCarvalho314/risklive', 'Pulled image repository provenance mismatch')
     run(['docker', 'pull', model['services']['caddy']['image']])
 
@@ -147,10 +150,11 @@ def handle(verb, request, policy):
     if verb == 'status':
         return load(active_file) if active_file.exists() else {'status': 'historical-unverified'}
     candidate = request.get('candidate')
-    if verb == 'rollback':
+    if verb == 'rollback' or (verb == 'plan' and candidate is None):
         require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', request.get('release_id', '')), 'Invalid rollback release')
         prior = load(state / 'releases' / (request['release_id'] + '.json'))
         require(prior.get('verified') is True, 'Rollback target was not verified')
+        require(prior['config_revision'] == policy['config_revision'], 'Rollback configuration requires explicit retained policy activation')
         candidate = prior['candidate']
     args, env, model = plan(candidate, request, policy)
     if verb == 'plan':
@@ -162,8 +166,10 @@ def handle(verb, request, policy):
     if current is None:
         require(policy.get('initial_cutover_approved') is True, 'Initial cutover requires explicit reviewed host policy approval')
         require(policy.get('legacy_state_compatibility_verified') is True, 'Legacy state compatibility not verified')
-    elif verb == 'rollback':
-        require(compatible(current['candidate'], candidate, policy), 'Unsafe database rollback: state compatibility not established')
+        require(policy.get('initial_cutover_candidate_identity') == candidate_identity(candidate), 'Initial cutover candidate not explicitly approved')
+    else:
+        require(current['config_revision'] == policy['config_revision'], 'Configuration transition requires separately reviewed policy activation')
+        require(compatible(current['candidate'], candidate, policy), 'Unsafe state transition: database compatibility not established')
     release_file = state / 'releases' / (candidate['release_id'] + '.json')
     if release_file.exists():
         require(load(release_file)['candidate'] == candidate, 'Immutable release ID collision')

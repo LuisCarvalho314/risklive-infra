@@ -8,9 +8,12 @@ import sys
 
 def command(environment, original):
     allowed = {'dev': {'start', 'update', 'stop', 'redeploy', 'status'},
-               'prod': {'plan', 'deploy', 'rollback', 'status'}}
+               'prod': {'plan', 'deploy', 'rollback', 'status'},
+               'prod-plan': {'plan', 'status'}}
     if environment not in allowed or original not in allowed[environment]:
         raise ValueError('Only an allowlisted deployment operation is accepted')
+    if environment == 'prod-plan':
+        environment = 'prod'
     return ['/usr/bin/sudo', '-n', '/usr/local/sbin/risklive-deploy-' + environment, original]
 
 

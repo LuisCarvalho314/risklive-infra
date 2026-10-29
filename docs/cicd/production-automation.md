@@ -26,6 +26,7 @@ Create `/etc/risklive-deploy/prod.json` from this template outside the repositor
   "backup_max_age_seconds": 86400,
   "compatible_transitions": [],
   "initial_cutover_approved": false,
+  "initial_cutover_candidate_identity": "<approved candidate canonical identity>",
   "legacy_state_compatibility_verified": false
 }
 ```
@@ -39,3 +40,5 @@ Deploy the same candidate to development first. Healthy integration evidence is 
 Post-rollout checks require healthy app/web/Caddy containers, exactly one running scheduler with its intended command, and HTTP 200 through host port 8888. On health failure, image rollback occurs only when a reviewed directional revision pair appears in `compatible_transitions`; list both directions only after both are verified. Matching arbitrary image-supplied compatibility strings grants no permission. With unknown state compatibility the deployment fails and records the failure for an operator. No automatic database restore occurs. Explicit rollback selects a prior healthy host record and also requires a reviewed compatible transition; its old image/configuration model must still validate against the approved host policy.
 
 Configuration changes require a new reviewed policy/model and infrastructure revision. Retain old checkout/model/policy versions outside the repository when changing configuration; rollback across configuration versions requires operator review/activation of the corresponding retained policy before dispatch. This prevents silently changing production mounts while rolling back images.
+
+The workflow prepare job uses the separate plan-only key in `production-plan` to verify exact host paths, storage, Compose, development evidence and backup readiness before the production job requests approval. Both forward and reverse state transitions must be explicitly registered in host policy by application source revision. Initial cutover approval is bound to an exact canonical candidate identity.
