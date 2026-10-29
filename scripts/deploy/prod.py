@@ -87,7 +87,9 @@ def verify_images(candidate, model):
         require(labels.get('org.opencontainers.image.revision') == candidate['source']['revision'], 'Pulled image source provenance mismatch')
         require(image in metadata.get('RepoDigests', []), 'Pulled image digest identity mismatch')
         if role == 'app':
-            require(labels.get('io.risklive.seca.revision') == candidate['source']['seca_revision'], 'Pulled app SECA provenance mismatch')
+            require(labels.get('org.risklive.seca.revision') == candidate['source']['seca_revision'], 'Pulled app SECA provenance mismatch')
+            if candidate['source'].get('seca_v2_revision'):
+                require(labels.get('org.risklive.seca-v2.revision') == candidate['source']['seca_v2_revision'], 'Pulled app SECA V2 provenance mismatch')
         require(labels.get('org.opencontainers.image.source') == 'https://github.com/LuisCarvalho314/risklive', 'Pulled image repository provenance mismatch')
     run(['docker', 'pull', model['services']['caddy']['image']])
 

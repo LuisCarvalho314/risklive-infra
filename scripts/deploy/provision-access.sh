@@ -3,6 +3,18 @@
 set -euo pipefail
 [[ $EUID == 0 ]] || { echo 'Run as root after reviewing this script'; exit 1; }
 [[ $# == 3 && -f $1 && -f $2 && -f $3 ]] || { echo 'usage: provision-access.sh dev.pub prod.pub prod-plan.pub'; exit 1; }
+# Validate the interpreter before any account or filesystem provisioning.
+[[ -x /usr/local/bin/python3 ]] || { echo 'SETUP REQUIRED: root-owned Python >=3.11 at /usr/local/bin/python3'; exit 1; }
+/usr/local/bin/python3 - <<'PYVERIFY'
+import os, pathlib, sys
+if sys.version_info < (3,11):
+    raise SystemExit('SETUP REQUIRED: Python >=3.11')
+p=pathlib.Path('/usr/local/bin/python3').resolve()
+for item in (p,*p.parents):
+    st=item.stat()
+    if st.st_uid != 0 or st.st_mode & 0o022:
+        raise SystemExit('SETUP REQUIRED: root-owned interpreter and non-writable ancestors')
+PYVERIFY
 root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 install -d -m 0755 /usr/local/lib/risklive-deploy /etc/risklive-deploy
 install -d -m 0700 /var/lib/risklive-deploy
@@ -15,11 +27,12 @@ for env in dev prod prod-plan; do
   install -d -m 0700 -o root -g root "/home/$user/.ssh"
   pub=$1; [[ $env == prod ]] && pub=$2; [[ $env == prod-plan ]] && pub=$3
   [[ $(wc -l < "$pub") == 1 ]] || { echo 'Exactly one public key required'; exit 1; }
-  printf 'restrict,command="/usr/bin/python3 /usr/local/lib/risklive-deploy/ssh_gate.py %s" %s\n' "$env" "$(cat "$pub")" > "/home/$user/.ssh/authorized_keys"
+  printf 'restrict,command="/usr/local/bin/python3 /usr/local/lib/risklive-deploy/ssh_gate.py %s" %s\n' "$env" "$(cat "$pub")" > "/home/$user/.ssh/authorized_keys"
   chmod 0600 "/home/$user/.ssh/authorized_keys"
   # Separate copied entrypoints preserve the filename-based environment constraint.
   target_env=$env; [[ $env == prod-plan ]] && target_env=prod
   install -m 0755 "$root/scripts/deploy/dispatch.py" "/usr/local/sbin/risklive-deploy-$target_env"
+  sed -i '1c#!/usr/local/bin/python3' "/usr/local/sbin/risklive-deploy-$target_env"
   # Entry point imports exclusively root-owned modules.
   sed -i '/import sys/a sys.path.insert(0, "/usr/local/lib/risklive-deploy")' "/usr/local/sbin/risklive-deploy-$target_env"
   verbs='start, update, stop, redeploy, status'
