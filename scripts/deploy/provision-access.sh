@@ -23,6 +23,9 @@ install -m 0644 "$root/scripts/release/preflight.py" /usr/local/lib/risklive-dep
 for env in dev prod prod-plan; do
   user="risklive-deploy-$env"
   id "$user" >/dev/null 2>&1 || useradd --create-home --shell /bin/sh "$user"
+  [[ " $(id -nG "$user") " != *' docker '* ]] || { echo "Refusing existing docker-group deployment identity $user"; exit 1; }
+  chown root:root "/home/$user"
+  chmod 0755 "/home/$user"
   # No docker group, shell-capable sudo, PTYs, forwarding, or user-controlled code.
   install -d -m 0700 -o root -g root "/home/$user/.ssh"
   pub=$1; [[ $env == prod ]] && pub=$2; [[ $env == prod-plan ]] && pub=$3
