@@ -39,7 +39,7 @@ class HygieneTests(unittest.TestCase):
             b.hygiene(True)
 
     def test_missing_required_file_rejected(self):
-        self.git('rm', 'README.md')
+        self.git('rm', '--cached', '-f', 'README.md')
         with self.assertRaisesRegex(ValueError, 'Baseline files missing'):
             b.hygiene(True)
 
