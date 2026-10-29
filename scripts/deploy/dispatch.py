@@ -20,9 +20,12 @@ def main():
         raise ValueError('Operation not allowed')
     os.umask(0o077)
     policy_path = Path('/etc/risklive-deploy') / (environment + '.json')
-    info = policy_path.stat()
-    if info.st_uid != 0 or info.st_mode & 0o022:
-        raise ValueError('Deployment policy must be root-owned and not writable by others')
+    if policy_path.resolve() != policy_path:
+        raise ValueError('Deployment policy must not traverse symlinks')
+    for path in (policy_path, *policy_path.parents):
+        info = path.stat()
+        if info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('Deployment policy and ancestors must be root-owned and not writable by others')
     policy = json.loads(policy_path.read_text())
     payload = sys.stdin.buffer.read(1024 * 1024 + 1)
     if len(payload) > 1024 * 1024:
