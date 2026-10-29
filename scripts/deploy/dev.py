@@ -50,6 +50,9 @@ def app_config(policy, request):
     if revision != policy.get('config_revision'):
         raise ValueError('Installed configuration revision differs from requested revision')
     root = trusted(policy['app_root'])
+    if not (root / '.git').is_dir():
+        raise ValueError('Application configuration must be a root-owned standalone Git checkout')
+    trusted(root / '.git/config')
     for relative in ('deployment/scripts/dev.sh', 'deployment/scripts/validate-dev.py',
                      'deployment/compose/docker-compose.prod.yml',
                      'deployment/compose/docker-compose.smoke.yml',
@@ -61,7 +64,7 @@ def app_config(policy, request):
     if actual != expected:
         raise ValueError('Application configuration checkout revision drift')
     # Files driving privileged Docker operations must match the provisioned commit.
-    if run(['git', '-C', root, 'status', '--porcelain', '--untracked-files=no', '--',
+    if run(['git', '-c', 'core.fsmonitor=false', '-C', root, 'status', '--porcelain', '--untracked-files=no', '--',
             'deployment']).strip():
         raise ValueError('Application deployment configuration has local changes')
     return root
