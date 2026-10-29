@@ -50,19 +50,47 @@
     "images": {
       "app": {
         "reference": "risklive-app:8a6775ac9a5c",
-        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95"
+        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95",
+        "provenance": {
+          "source_revision": "8a6775ac9a5cd8bef2462d400b853e28a1875884",
+          "source_verification": "tag-correspondence-only",
+          "platform": null,
+          "registry": null,
+          "archive": null
+        }
       },
       "scheduler": {
         "reference": "risklive-app:8a6775ac9a5c",
-        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95"
+        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95",
+        "provenance": {
+          "source_revision": "8a6775ac9a5cd8bef2462d400b853e28a1875884",
+          "source_verification": "tag-correspondence-only",
+          "platform": null,
+          "registry": null,
+          "archive": null
+        }
       },
       "web": {
         "reference": "risklive-web:8a42195ba06d",
-        "local_image_id": "sha256:1f04ca8075d0a10c063a178f914e4eaef8c907010ef8e98d3adc2546f9d17567"
+        "local_image_id": "sha256:1f04ca8075d0a10c063a178f914e4eaef8c907010ef8e98d3adc2546f9d17567",
+        "provenance": {
+          "source_revision": "8a42195ba06de8bac84bf7f1bd232f34c8d68f27",
+          "source_verification": "tag-correspondence-only",
+          "platform": null,
+          "registry": null,
+          "archive": null
+        }
       },
       "caddy": {
         "reference": "caddy:2.8.4-alpine",
-        "local_image_id": "sha256:612f0ff47f33888e3b61a8db399ff2dc22c2cefb8cb652d86a619e52eabcd51f"
+        "local_image_id": "sha256:612f0ff47f33888e3b61a8db399ff2dc22c2cefb8cb652d86a619e52eabcd51f",
+        "provenance": {
+          "source_revision": null,
+          "source_verification": "upstream-unverified",
+          "platform": null,
+          "registry": null,
+          "archive": null
+        }
       }
     },
     "observed_compose_by_service": {
@@ -122,5 +150,11 @@
     "Azure networking, DNS, backup scheduling/restore verification and external CI/CD were not inspected.",
     "No development image IDs were supplied. Development reproducibility pins configuration; exact prior dev binaries remain unknown.",
     "Compose labels identify file paths, not their creation-time Git revisions. Pinned revisions describe inspected on-disk configuration."
-  ]
+  ],
+  "image_recovery": {
+    "strategy": "Private GHCR for future releases; encrypted off-host Docker-save archives for exact legacy binaries after explicit approval.",
+    "status": "unverified",
+    "inspection": "Direct Docker metadata inspection unavailable: daemon socket access denied. No registry or archive retrieval performed.",
+    "publication": "Proposal only; no workflow activated and no images built, tagged or published."
+  }
 }
