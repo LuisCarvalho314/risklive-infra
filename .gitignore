@@ -1,0 +1,20 @@
+# Deny by default: deliberately allow each reviewed infrastructure file.
+*
+!/.gitignore
+!/README.md
+!/release.json
+!/.githooks/
+!/.githooks/pre-commit
+!/docs/
+!/docs/discovery.md
+!/docs/reconstruction.md
+!/docs/verification.md
+!/hosts/
+!/hosts/jarvis/
+!/hosts/jarvis/deployment.env.example
+!/hosts/jarvis/app.env.example
+!/hosts/jarvis/web.env.example
+!/hosts/jarvis/compose.override.yml
+!/scripts/
+!/scripts/baseline.py
+!/scripts/inspect-live.sh

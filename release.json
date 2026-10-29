@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "host": "jarvis",
+  "observed_on": "2026-10-29",
+  "evidence": "Operator-pasted docker ps/inspect/compose ls and systemctl output; filesystem inspected read-only by Codex.",
+  "application_repository": "https://github.com/LuisCarvalho314/risklive.git",
+  "project": "risklive-prod",
+  "sources": {
+    "production": {
+      "revision": "8a6775ac9a5cd8bef2462d400b853e28a1875884",
+      "observed_checkout": "/home/azureuser/risklive-dev/.worktrees/seca-v2-release",
+      "files_sha256": {
+        "deployment/compose/docker-compose.prod.yml": "c593d0bc301b2419124ffac0964538927ee34c27168f60fe58257575b3820255",
+        "deployment/env/app.env.example": "b58fdd2d5d52a9f1754b077d14017a0ce50b33802af2acd46f9a4f30ed06437b",
+        "deployment/env/web.env.example": "f5fee43b188bc12dbbb4b3aaf8ab00f24374ace029c5754e77af9f1ce9608ce9",
+        "deployment/env/caddy.env.example": "a698eded26b82dc26fee723853a432e9093e879b42190f2e792079418b0b3d4f"
+      }
+    },
+    "caddy": {
+      "revision": "f562f1425c1408712bd5168560fd227b44b89467",
+      "observed_checkout": "/home/azureuser/risklive-dev",
+      "files_sha256": {
+        "deployment/caddy/Caddyfile.prod": "bd9892ea2da784fb2c5a0bcb1177dc2be86115dfb86bb040229d9a2179759462"
+      }
+    },
+    "development": {
+      "revision": "e1f28218f857362c890d1648062d27b7ce2585ef",
+      "observed_checkout": "/home/azureuser/risklive-on-demand-dev",
+      "files_sha256": {
+        "deployment/caddy/Caddyfile.prod": "bd9892ea2da784fb2c5a0bcb1177dc2be86115dfb86bb040229d9a2179759462",
+        "deployment/compose/docker-compose.dev-live.yml": "30789704fb97e8d7867d2b98256ff5582295a8558644b81914d45c0c3922ec8c",
+        "deployment/compose/docker-compose.dev.yml": "80a54d895b62b6368030c14d8635a70134b85d4a873f5fd4562ee1007866fdce",
+        "deployment/compose/docker-compose.prod.yml": "d6ec1b9ca98970483347a99677786ffa03f32313a601edc083f6a1ccbc2b8674",
+        "deployment/compose/docker-compose.smoke.yml": "1e3bdad3bc79f62e98438813c632125fe3d0842c89ff247d8dc6d2de1cce1b10",
+        "deployment/env/app.env.example": "0a1ce14c6e559cf520aed6f7770cc59f504330c869a02f0e728dfba92ad65f91",
+        "deployment/env/caddy.env.example": "2822ed5e21dbd9d6176a9f18c5ddff91c0df7577ea0cc9a19824b1871fbe0cda",
+        "deployment/env/web.env.example": "dc5a1c669f2f2dbc3d6ec246ede37c222736bbed7ea1a7556715422ddf170e0e",
+        "deployment/liwan/collection-settings.json": "f17ef47ea0256ebf2da814a213013e8f88b9c4e923c02734ad3eeadbe0a3c6d0",
+        "deployment/liwan/config.toml": "d883667734704a3968baa2659ecfff682fb7ba7d0b64ccf3157cab9553829176",
+        "deployment/liwan/project-display-settings.json": "9842fcf11c31b2c872ad1bd96e9505dd29fb5248a59035cc79b6eb846b83b8cc",
+        "deployment/scripts/check-dev.py": "6b398386b408dd47e110adf137fc7bb412f243fca71e23031a45c06fd31ab500",
+        "deployment/scripts/deploy.sh": "6006e093d7367d9a5d21369ca3697783693e7f6811eeaf523632349596c43925",
+        "deployment/scripts/dev.sh": "aea22406373547979109869c7d1ce2670dd4753c48a791dbdb51aa4951bb999c",
+        "deployment/scripts/rebootstrap-seca-diagnostics.sh": "d113688caaa91f9909484f68132158b4c32aa09af430fa72161a9a0f4559ef12",
+        "deployment/scripts/validate-dev.py": "5d5751cb10d3fca9f02796b122ca129381edd3d05528120c23a055fff800cfd3"
+      }
+    }
+  },
+  "production": {
+    "images": {
+      "app": {
+        "reference": "risklive-app:8a6775ac9a5c",
+        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95"
+      },
+      "scheduler": {
+        "reference": "risklive-app:8a6775ac9a5c",
+        "local_image_id": "sha256:c98694c54c5a52e5261d3d8130a6449d768faef7a387c51e9b209991b7ab6a95"
+      },
+      "web": {
+        "reference": "risklive-web:8a42195ba06d",
+        "local_image_id": "sha256:1f04ca8075d0a10c063a178f914e4eaef8c907010ef8e98d3adc2546f9d17567"
+      },
+      "caddy": {
+        "reference": "caddy:2.8.4-alpine",
+        "local_image_id": "sha256:612f0ff47f33888e3b61a8db399ff2dc22c2cefb8cb652d86a619e52eabcd51f"
+      }
+    },
+    "observed_compose_by_service": {
+      "web": {
+        "path": "/home/azureuser/risklive-dev/.worktrees/seca-v2-prod/deployment/compose/docker-compose.prod.yml",
+        "checkout_revision_observed": "8a42195ba06de8bac84bf7f1bd232f34c8d68f27"
+      },
+      "app": {
+        "path": "/home/azureuser/risklive-dev/.worktrees/seca-v2-release/deployment/compose/docker-compose.prod.yml",
+        "checkout_revision_observed": "8a6775ac9a5cd8bef2462d400b853e28a1875884"
+      },
+      "scheduler": {
+        "path": "/home/azureuser/risklive-dev/.worktrees/seca-v2-release/deployment/compose/docker-compose.prod.yml",
+        "checkout_revision_observed": "8a6775ac9a5cd8bef2462d400b853e28a1875884"
+      },
+      "caddy": {
+        "path": "/home/azureuser/risklive-dev/deployment/compose/docker-compose.prod.yml",
+        "checkout_revision_observed": "f562f1425c1408712bd5168560fd227b44b89467"
+      }
+    },
+    "data_root": "/opt/risklive/data",
+    "environment_files": {
+      "app": "/opt/risklive/data/env/app.env",
+      "web": "/opt/risklive/data/env/web.env",
+      "caddy": "/opt/risklive/data/env/caddy.env"
+    },
+    "environment_file_status": "Files exist; creation-time env-file paths/values are not established by Docker labels.",
+    "network": "risklive-prod_internal",
+    "http_bind": "0.0.0.0:8888",
+    "caddy_file": "/home/azureuser/risklive-dev/deployment/caddy/Caddyfile.prod",
+    "named_volumes": [
+      "risklive-prod_caddy_data",
+      "risklive-prod_caddy_config"
+    ],
+    "host_caddy": {
+      "caddy.service": "inactive/disabled",
+      "caddy-api.service": "inactive/disabled"
+    },
+    "registry_digests": null
+  },
+  "development": {
+    "project": "risklive-dev",
+    "data_root": "/opt/risklive/dev-data",
+    "http_bind": "127.0.0.1:8188",
+    "observed_containers": [],
+    "image_references": {
+      "app": "risklive-dev-app:local",
+      "web": "risklive-dev-web:local"
+    },
+    "image_status": "Expected dev.sh defaults only; installed tags and image IDs unverified; no development containers observed."
+  },
+  "unresolved": [
+    "Registry RepoDigests, image archive availability and platform are unverified. Local image IDs are not registry manifest digests.",
+    "Creation-time container environment and complete runtime config were not collected. Host env files may differ from running values.",
+    "Caddy on-disk file may differ from its in-memory configuration; active config API was not queried.",
+    "Socket command did not execute in the pasted session; published Docker binding is verified by inspect.",
+    "Azure networking, DNS, backup scheduling/restore verification and external CI/CD were not inspected.",
+    "No development image IDs were supplied. Development reproducibility pins configuration; exact prior dev binaries remain unknown.",
+    "Compose labels identify file paths, not their creation-time Git revisions. Pinned revisions describe inspected on-disk configuration."
+  ]
+}

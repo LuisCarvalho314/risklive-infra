@@ -1,0 +1,11 @@
+# Host path only. Service definitions stay authoritative in risklive.
+# Compose merges volumes by container target; the other Caddy volumes survive.
+services:
+  caddy:
+    volumes:
+      - type: bind
+        source: ${RISKLIVE_CADDY_FILE:?Set the pinned application Caddyfile path}
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
