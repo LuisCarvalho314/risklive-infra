@@ -159,9 +159,7 @@ def handle(verb, request, policy):
         require(prior['config_revision'] == policy['config_revision'], 'Rollback configuration requires explicit retained policy activation')
         candidate = prior['candidate']
     args, env, model = plan(candidate, request, policy)
-    if verb == 'plan':
-        return {'status': 'ready', 'release_id': candidate['release_id'], 'candidate_identity': candidate_identity(candidate), 'images': candidate['images']}
-    require(verb in {'deploy', 'rollback'}, 'Unknown production operation')
+    require(verb in {'plan', 'deploy', 'rollback'}, 'Unknown production operation')
     # Access to this operation is granted only by the production-specific key,
     # released to the approval-gated workflow. A JSON approval flag grants nothing.
     current = load(active_file) if active_file.exists() else None
@@ -172,6 +170,8 @@ def handle(verb, request, policy):
     else:
         require(current['config_revision'] == policy['config_revision'], 'Configuration transition requires separately reviewed policy activation')
         require(compatible(current['candidate'], candidate, policy), 'Unsafe state transition: database compatibility not established')
+    if verb == 'plan':
+        return {'status': 'ready', 'release_id': candidate['release_id'], 'candidate_identity': candidate_identity(candidate), 'images': candidate['images']}
     release_file = state / 'releases' / (candidate['release_id'] + '.json')
     if release_file.exists():
         require(load(release_file)['candidate'] == candidate, 'Immutable release ID collision')
