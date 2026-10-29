@@ -1,0 +1,59 @@
+# INACTIVE PROPOSAL. Keep outside .github/workflows until reviewed and approved.
+# Builds disposable candidates only; does not publish, promote, or deploy.
+# Before activation: pin every action to a verified full commit and configure
+# image-candidate-review with required reviewers and protected main-only refs.
+name: Build reviewed image candidates
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full application SHA, equal to the selected main commit
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: candidate-images-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  candidates:
+    if: github.ref == 'refs/heads/main'
+    environment: image-candidate-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      REVISION: ${{ inputs.revision }}
+      EXPECTED_REVISION: ${{ github.sha }}
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require exact tested application revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          test "$REVISION" = "$EXPECTED_REVISION"
+          # A missing/inaccessible run fails closed. Branch protection remains
+          # responsible for required job coverage and trusted workflow changes.
+          runs=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$REVISION&status=completed&event=push&per_page=100")
+          jq -e --arg sha "$REVISION" '.workflow_runs | any(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")' <<<"$runs"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          submodules: recursive
+      - name: Verify checkout and build both candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          test "$(git -C experimental rev-parse HEAD)" = "$(cat docker/seca/SOURCE_REVISION)"
+          (cd experimental && sha256sum --check ../docker/seca/SOURCE.sha256)
+          docker build --platform linux/amd64 --file docker/Dockerfile.app \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --tag "risklive-app:candidate-$REVISION" .
+          docker build --platform linux/amd64 --file docker/Dockerfile.web \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            --tag "risklive-web:candidate-$REVISION" .
+          printf 'Built disposable app/web candidates for %s; no publication or deployment.\n' "$REVISION" >> "$GITHUB_STEP_SUMMARY"
