@@ -34,13 +34,28 @@ def read_json(path, default=None):
     return json.loads(path.read_text()) if path.exists() else default
 
 
+def trusted(path):
+    path = Path(path)
+    if not path.is_absolute() or path.resolve() != path:
+        raise ValueError('Development configuration path must be canonical')
+    for part in (path, *path.parents):
+        info = part.stat()
+        if info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('Development executable configuration must be root-owned and not writable by others')
+    return path
+
+
 def app_config(policy, request):
     revision = validate_revision(request.get('config_revision'), 'configuration revision')
     if revision != policy.get('config_revision'):
         raise ValueError('Installed configuration revision differs from requested revision')
-    root = Path(policy['app_root'])
-    if not root.is_absolute() or root.resolve() != root:
-        raise ValueError('Application config root must be canonical')
+    root = trusted(policy['app_root'])
+    for relative in ('deployment/scripts/dev.sh', 'deployment/scripts/validate-dev.py',
+                     'deployment/compose/docker-compose.prod.yml',
+                     'deployment/compose/docker-compose.smoke.yml',
+                     'deployment/compose/docker-compose.dev.yml',
+                     'deployment/caddy/Caddyfile.prod'):
+        trusted(root / relative)
     expected = validate_revision(policy.get('app_revision'), 'installed application config revision')
     actual = run(['git', '-C', root, 'rev-parse', 'HEAD']).strip()
     if actual != expected:
@@ -86,6 +101,8 @@ def pull_candidate(candidate, tag, env):
             raise ValueError('Pulled image source repository mismatch')
         if labels.get('org.risklive.seca.revision') != candidate['source']['seca_revision']:
             raise ValueError('Pulled image SECA revision mismatch')
+        if candidate['source'].get('seca_v2_revision') and labels.get('org.risklive.seca-v2.revision') != candidate['source']['seca_v2_revision']:
+            raise ValueError('Pulled image SECA V2 revision mismatch')
         run(['docker', 'tag', ref, 'risklive-dev-' + role + ':' + tag], env)
 
 
@@ -148,6 +165,9 @@ def handle(action, request, policy):
         raise ValueError('Development data root must be /opt/risklive/dev-data without symlinks')
     if not (DATA_ROOT / '.risklive-development').is_file():
         raise ValueError('Development data must be initialized with dev.sh init before automation')
+    trusted(DATA_ROOT / '.risklive-development')
+    for role in ('app', 'web', 'caddy'):
+        trusted(DATA_ROOT / 'env' / (role + '.env'))
     script = root / 'deployment/scripts/dev.sh'
     if action == 'stop':
         # Persist intent first; even if shutdown fails, pushes must not wake it.
@@ -174,7 +194,8 @@ def handle(action, request, policy):
         raise
     evidence = dict(checks, candidate_identity=identity,
                     config_revision=request['config_revision'], release_id=tag,
-                    images=candidate['images'], source=candidate['source'])
+                    images=candidate['images'], source=candidate['source'],
+                    app_config_revision=policy['app_revision'])
     deployment = {'candidate': candidate, 'candidate_identity': identity,
                   'config_revision': request['config_revision'], 'evidence': evidence,
                   'operator': request.get('operator'), 'run_url': request.get('run_url')}

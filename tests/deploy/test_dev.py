@@ -12,11 +12,12 @@ import dev
 from release import candidate_identity
 
 INTEGRATION_CHECKS = dev.integration_checks
+TRUSTED = dev.trusted
 
 
 def candidate():
     return {'schema_version': 1, 'release_id': 'candidate-123',
-            'source': {'repository': 'LuisCarvalho314/risklive', 'revision': 'a' * 40, 'seca_revision': 'b' * 40},
+            'source': {'repository': 'LuisCarvalho314/risklive', 'revision': 'a' * 40, 'seca_revision': 'b' * 40, 'seca_v2_revision': 'f' * 40},
             'images': {role: 'ghcr.io/luiscarvalho314/risklive-' + role + '@sha256:' + 'c' * 64
                        for role in ('app', 'web')},
             'ci': {'conclusion': 'success', 'run_id': '123',
@@ -41,7 +42,8 @@ class DevelopmentTests(unittest.TestCase):
                         patch.object(dev, 'app_config', return_value=self.root / 'app'),
                         patch.object(dev, 'compose_config', return_value={}),
                         patch.object(dev, 'pull_candidate'), patch.object(dev, 'run', return_value='abc'),
-                        patch.object(dev, 'integration_checks', return_value={'healthy': True, 'integration_passed': True})]
+                        patch.object(dev, 'integration_checks', return_value={'healthy': True, 'integration_passed': True}),
+                        patch.object(dev, 'trusted', side_effect=lambda p: Path(p))]
         self.mocks = [p.start() for p in self.patches]
 
     def tearDown(self):
@@ -140,6 +142,24 @@ class DevelopmentTests(unittest.TestCase):
                             'Env': ['RISKLIVE_EXTERNAL_APIS_ENABLED=false', 'DISABLE_SCHEDULER=true']},
                  'Image': role + '-id', 'State': {'Running': True, 'Health': {'Status': 'healthy'}},
                  'Mounts': []} for role in ('app', 'web', 'caddy')]
+
+    def test_unprivileged_checkout_rejected(self):
+        # Test the real ownership guard against this user's temporary directory.
+        with self.assertRaisesRegex(ValueError, 'root-owned'):
+            TRUSTED(self.root)
+
+    def test_seca_v2_image_label_mismatch_rejected(self):
+        value = candidate()
+        metadata = {'RepoDigests': [value['images']['app']], 'Config': {'Labels': {
+            'org.opencontainers.image.revision': value['source']['revision'],
+            'org.opencontainers.image.source': 'https://github.com/LuisCarvalho314/risklive',
+            'org.risklive.seca.revision': value['source']['seca_revision'],
+            'org.risklive.seca-v2.revision': '0' * 40}}}
+        self.mocks[4].side_effect = ['', json.dumps([metadata])]
+        # Invoke real implementation, independently of the lifecycle test stub.
+        original = self.patches[3].temp_original
+        with self.assertRaisesRegex(ValueError, 'SECA V2'):
+            original(value, value['release_id'], {})
 
     def test_live_api_operation_not_allowed(self):
         with self.assertRaisesRegex(ValueError, 'Unsupported'):
