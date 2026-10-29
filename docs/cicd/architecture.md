@@ -1,3 +1,5 @@
+> Historical design document. Executable workflows and current activation steps are in [activation.md](activation.md) and [implementation-report.md](implementation-report.md).
+
 # CI/CD architecture and current audit
 
 This proposal is inactive. No application workflows or GitHub settings were changed. The companion `candidate-build.yml.example` lives outside `.github/workflows`; it cannot run here. It is a narrow, non-publishing candidate build proposal, not the complete production pipeline. It must pass the activation checklist below before being moved into the application repository.

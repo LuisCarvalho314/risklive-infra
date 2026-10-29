@@ -30,13 +30,14 @@ for env in dev prod prod-plan; do
   install -d -m 0700 -o root -g root "/home/$user/.ssh"
   pub=$1; [[ $env == prod ]] && pub=$2; [[ $env == prod-plan ]] && pub=$3
   [[ $(wc -l < "$pub") == 1 ]] || { echo 'Exactly one public key required'; exit 1; }
-  printf 'restrict,command="/usr/local/bin/python3 /usr/local/lib/risklive-deploy/ssh_gate.py %s" %s\n' "$env" "$(cat "$pub")" > "/home/$user/.ssh/authorized_keys"
+  printf 'restrict,command="/usr/local/bin/python3 -I /usr/local/lib/risklive-deploy/ssh_gate.py %s" %s\n' "$env" "$(cat "$pub")" > "/home/$user/.ssh/authorized_keys"
   chmod 0600 "/home/$user/.ssh/authorized_keys"
   # Separate copied entrypoints preserve the filename-based environment constraint.
   target_env=$env; [[ $env == prod-plan ]] && target_env=prod
   install -m 0755 "$root/scripts/deploy/dispatch.py" "/usr/local/sbin/risklive-deploy-$target_env"
   sed -i '1c#!/usr/local/bin/python3' "/usr/local/sbin/risklive-deploy-$target_env"
   # Entry point imports exclusively root-owned modules.
+  sed -i '1c#!/usr/local/bin/python3 -I' "/usr/local/sbin/risklive-deploy-$target_env"
   sed -i '/import sys/a sys.path.insert(0, "/usr/local/lib/risklive-deploy")' "/usr/local/sbin/risklive-deploy-$target_env"
   verbs='start, update, stop, redeploy, status'
   [[ $env == prod ]] && verbs='plan, deploy, rollback, status'

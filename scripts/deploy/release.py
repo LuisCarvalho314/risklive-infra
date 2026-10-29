@@ -40,7 +40,9 @@ def validate_candidate(candidate):
     source = candidate.get('source', {})
     require(isinstance(source, dict) and source.get('repository') == 'LuisCarvalho314/risklive', 'Unexpected application repository')
     validate_revision(source.get('revision'), 'source revision')
-    validate_revision(source.get('seca_revision'), 'SECA revision')
+    validate_revision(source.get('seca_revision'), 'SECA-Light revision')
+    if 'seca_v2_revision' in source:
+        validate_revision(source['seca_v2_revision'], 'SECA V2 revision')
     images = candidate.get('images', {})
     require(isinstance(images, dict) and set(images) == {'app', 'web'}, 'App and web image digests required')
     for role in ('app', 'web'):
@@ -125,13 +127,21 @@ def main():
     else:
         root = args.state_root
         result = {'candidates': [], 'active': {}}
-        for path in sorted((root / 'candidates').glob('*.json')):
-            c = validate_candidate(json.loads(path.read_text()))
-            result['candidates'].append({'release_id': c['release_id'], 'source': c['source'], 'images': c['images']})
+        seen = set()
+        paths = list((root / 'candidates').glob('*.json')) + list((root / 'dev/candidates').glob('*.json')) + list((root / 'prod/releases').glob('*.json'))
+        for path in sorted(paths):
+            value = json.loads(path.read_text())
+            c = validate_candidate(value.get('candidate', value))
+            identity = candidate_identity(c)
+            if identity not in seen:
+                result['candidates'].append({'release_id': c['release_id'], 'candidate_identity': identity, 'source': c['source'], 'images': c['images']})
+                seen.add(identity)
         for env in ('dev', 'prod'):
-            path = root / env / 'active.json'
-            if path.exists():
-                result['active'][env] = json.loads(path.read_text())
+            result['active'][env] = {}
+            for pointer in ('active', 'previous', 'enabled'):
+                path = root / env / (pointer + '.json')
+                if path.exists():
+                    result['active'][env][pointer] = json.loads(path.read_text())
         print(json.dumps(result, indent=2, sort_keys=True))
 
 

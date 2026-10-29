@@ -127,6 +127,14 @@ def health(args, env, timeout=180):
                 healthy &= state.get('Restarting', False) is False
                 # Check PID 1 and scheduler singleton; no scheduler task is executed.
                 healthy &= 'app.scheduler' in ' '.join(meta['Config'].get('Cmd') or [])
+                # Verify the scheduler process owns its singleton lock without
+                # constructing a scheduler, executing jobs or altering state.
+                probe = ("import fcntl,sys; f=open('/app/runtime/scheduler.lock','r'); "
+                         "exec('try:\n fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\nexcept BlockingIOError:\n sys.exit(0)\nsys.exit(1)')")
+                try:
+                    run(['docker', 'exec', cid, 'python', '-c', probe])
+                except ValueError:
+                    healthy = False
             else:
                 healthy &= state.get('Health', {}).get('Status') == 'healthy'
         if healthy and seen == SERVICES:
@@ -154,12 +162,19 @@ def plan(candidate, request, policy):
     return args, env, model
 
 
+def public_record(record):
+    # Keep policy snapshots and rendered models on the host. Workflow output
+    # contains provenance and status, never container environment configuration.
+    return {key: record[key] for key in ('candidate', 'config_revision', 'operator',
+            'run_url', 'at_epoch', 'verified', 'status', 'model_sha256') if key in record}
+
+
 def handle(verb, request, policy):
     state = Path(policy.get('state_dir', '/var/lib/risklive-deploy/prod'))
     state.mkdir(parents=True, exist_ok=True)
     active_file = state / 'active.json'
     if verb == 'status':
-        return load(active_file) if active_file.exists() else {'status': 'historical-unverified'}
+        return public_record(load(active_file)) if active_file.exists() else {'status': 'historical-unverified'}
     candidate = request.get('candidate')
     if verb == 'rollback' or (verb == 'plan' and candidate is None):
         require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', request.get('release_id', '')), 'Invalid rollback release')
@@ -177,7 +192,9 @@ def handle(verb, request, policy):
         require(policy.get('legacy_state_compatibility_verified') is True, 'Legacy state compatibility not verified')
         require(policy.get('initial_cutover_candidate_identity') == candidate_identity(candidate), 'Initial cutover candidate not explicitly approved')
     else:
-        require(current['config_revision'] == policy['config_revision'], 'Configuration transition requires separately reviewed policy activation')
+        require(current['config_revision'] == policy['config_revision'] or
+                [current['config_revision'], policy['config_revision']] in policy.get('compatible_config_transitions', []),
+                'Configuration transition requires separately reviewed policy activation')
         require(compatible(current['candidate'], candidate, policy), 'Unsafe state transition: database compatibility not established')
     if verb == 'plan':
         return {'status': 'ready', 'release_id': candidate['release_id'], 'candidate_identity': candidate_identity(candidate), 'images': candidate['images']}
@@ -193,7 +210,7 @@ def handle(verb, request, policy):
         require(health(args, env, policy.get('health_timeout_seconds', 180)), 'Post-deployment health checks failed')
         scheduler_inventory()
     except Exception:
-        if current and compatible(candidate, current['candidate'], policy):
+        if current and current['config_revision'] == policy['config_revision'] and compatible(candidate, current['candidate'], policy):
             old_args, old_env, old_model = compose(policy, current['candidate'])
             verify_images(current['candidate'], old_model)
             run(old_args + ['up', '-d', '--no-build', '--remove-orphans', '--scale', 'scheduler=1'], env=old_env)
@@ -214,4 +231,4 @@ def handle(verb, request, policy):
         atomic_json(state / 'previous.json', current)
     atomic_json(active_file, result)
     record_once(events / (str(time.time_ns()) + '.json'), {**event, 'event': 'rollout-healthy'})
-    return result
+    return public_record(result)

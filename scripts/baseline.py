@@ -41,6 +41,35 @@ ALLOWED = REQUIRED | {
 }
 
 
+# Explicit executable CI/CD paths reviewed during integration.
+ALLOWED |= {
+    'docs/cicd/implementation-report.md',
+    'docs/cicd/activation.md',
+    'tests/deploy/test_approval.py',
+    'scripts/deploy/approval.py',
+    '.github/workflows/development.yml',
+    '.github/workflows/production.yml',
+    '.github/workflows/validate.yml',
+    'docs/cicd/access.md',
+    'docs/cicd/development-automation.md',
+    'docs/cicd/production-automation.md',
+    'docs/cicd/release-contract.md',
+    'schemas/candidate-v1.json',
+    'scripts/deploy/dev.py',
+    'scripts/deploy/dispatch.py',
+    'scripts/deploy/fetch_candidate.py',
+    'scripts/deploy/prepare_prod_policy.py',
+    'scripts/deploy/prod.py',
+    'scripts/deploy/provision-access.sh',
+    'scripts/deploy/release.py',
+    'scripts/deploy/ssh_gate.py',
+    'tests/deploy/test_dev.py',
+    'tests/deploy/test_fetch_candidate.py',
+    'tests/deploy/test_prod.py',
+    'tests/deploy/test_release.py',
+}
+
+
 
 def require(condition, message):
     if not condition:

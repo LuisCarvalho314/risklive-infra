@@ -1,6 +1,6 @@
 # Production activation and controlled cutover
 
-`Production deployment` (`.github/workflows/production.yml`) accepts a successful application CI run ID, or a previously verified release ID for rollback. It runs only from infrastructure `main` inside the protected `production` environment. The job verifies required reviewers, prevented self-review and disabled administrative bypass through the read-only GitHub environments API. Approval releases the production-specific SSH key; the host never trusts a caller-supplied approval boolean.
+`Production deployment` (`.github/workflows/production.yml`) accepts a successful application CI run ID, or a previously verified release ID for rollback. It runs only from infrastructure `main` inside the protected `production` environment. The job verifies required reviewers and prevented self-review through the read-only GitHub environments API, then requires an actual approval by another operator in this workflow run’s review history. Disable administrator bypass during setup; absent REST bypass metadata is not treated as proof. Approval releases the production-specific SSH key; the host never trusts a caller-supplied approval boolean.
 
 The host keeps immutable release records and append-only event files under `/var/lib/risklive-deploy/prod`. `active.json` and `previous.json` are pointers to verified records. The historical root `release.json` stays untouched. App/web images are pulled by digest, OCI source labels are checked, and the reviewed exact Compose model is deployed with project `risklive-prod`. App and scheduler always share an image. No build, volume deletion or database restoration is available.
 
@@ -25,6 +25,7 @@ Create `/etc/risklive-deploy/prod.json` from this template outside the repositor
   "backup_readiness_file": "/etc/risklive-deploy/backup-readiness.json",
   "backup_max_age_seconds": 86400,
   "compatible_transitions": [],
+  "compatible_config_transitions": [],
   "initial_cutover_approved": false,
   "initial_cutover_candidate_identity": "<approved candidate canonical identity>",
   "legacy_state_compatibility_verified": false
@@ -44,3 +45,7 @@ Configuration changes require a new reviewed policy/model and infrastructure rev
 The workflow prepare job uses the separate plan-only key in `production-plan` to verify exact host paths, storage, Compose, development evidence and backup readiness before the production job requests approval. Both forward and reverse state transitions must be explicitly registered in host policy by application source revision. Initial cutover approval is bound to an exact canonical candidate identity.
 
 Runtime Compose semantics are also checked through the shared hardened `scripts/release/preflight.py` validator. Even a newly approved model hash cannot change production data mount paths, read-only web mounts, environment paths, project networking, Caddy volumes/ingress, scheduler command/count, or grant host access. `prepare_prod_policy.py` pins the Caddyfile bytes alongside every Compose file; changing proxy content requires a separately reviewed policy. The configuration checkout must be an independent root-owned clone, including `.git/config`; a pointer into a user-writable worktree Git directory is rejected.
+
+Approval validation uses GitHub’s [environment API](https://docs.github.com/en/rest/deployments/environments#get-an-environment) and [workflow review history](https://docs.github.com/en/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run), with Actions read permission. A bypass without recorded approval does not authorize deployment.
+
+A reviewed configuration change also needs a directional `[old_infra_sha, new_infra_sha]` pair in `compatible_config_transitions`. This permits the transition without editing historical release evidence. Automatic rollback is limited to the same configuration revision; rollback across configuration revisions requires explicit activation of the retained policy and a reviewed configuration transition pair.

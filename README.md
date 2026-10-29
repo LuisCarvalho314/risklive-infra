@@ -69,3 +69,17 @@ Hardening tools and runbooks:
 The baseline check validates historical reconstruction. Deployment preflight is
 a separate promotion gate and intentionally rejects the unverified historical
 release. Synthetic backup tests do not establish production recoverability.
+
+## Executable CI/CD
+
+The implemented candidate, development, production and rollback workflows are
+described in [activation](docs/cicd/activation.md),
+[release contract](docs/cicd/release-contract.md),
+[development controls](docs/cicd/development-automation.md),
+[production cutover](docs/cicd/production-automation.md), and
+[restricted SSH access](docs/cicd/access.md). Historical `release.json` is preserved.
+
+Read-only inventory: `python scripts/deploy/release.py inventory /var/lib/risklive-deploy`.
+Host operation audit records are under `/var/lib/risklive-deploy/audit`; environment
+release histories are separate. Policies and full rendered models stay on the VM;
+workflow results report deployment provenance and health only.

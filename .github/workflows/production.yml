@@ -89,7 +89,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/deploy-key" "$RUNNER_TEMP/known-hosts"
   deployment:
     needs: prepare
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation != 'plan'
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 25
@@ -102,18 +102,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          OPERATOR: ${{ github.actor }}
         run: |
           gh api "repos/$REPO/environments/production" > "$RUNNER_TEMP/production-environment.json"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          value = json.loads((Path(os.environ['RUNNER_TEMP']) / 'production-environment.json').read_text())
-          rules = [r for r in value.get('protection_rules', []) if r['type'] == 'required_reviewers']
-          if not rules or not rules[0].get('reviewers') or not rules[0].get('prevent_self_review'):
-              raise SystemExit('SETUP REQUIRED: production must require reviewers and prevent self-review')
-          if value.get('can_admins_bypass', True):
-              raise SystemExit('SETUP REQUIRED: disable production environment administrator bypass')
-          PY
+          gh api "repos/$REPO/actions/runs/$RUN_ID/approvals" > "$RUNNER_TEMP/production-approvals.json"
+          python3 scripts/deploy/approval.py "$RUNNER_TEMP/production-environment.json" "$RUNNER_TEMP/production-approvals.json" "$OPERATOR"
       - name: Fetch exact tested candidate
         if: inputs.operation != 'rollback'
         env:

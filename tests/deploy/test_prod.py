@@ -85,8 +85,10 @@ class ProductionTests(unittest.TestCase):
             with patch.object(prod, 'plan', return_value=(['docker','compose'], {}, {})), patch.object(prod, 'verify_images'), patch.object(prod, 'run', return_value=''), patch.object(prod, 'health', return_value=True), patch.object(prod, 'scheduler_inventory'):
                 result = prod.handle('deploy', request, policy)
             self.assertTrue(result['verified'])
-            self.assertEqual(result['configuration'], {})
-            self.assertEqual(result['configuration_policy']['config_revision'], 'c'*40)
+            self.assertNotIn('configuration', result)
+            self.assertNotIn('configuration_policy', result)
+            self.assertEqual(json.loads((root/'active.json').read_text())['configuration'], {})
+            self.assertEqual(json.loads((root/'active.json').read_text())['configuration_policy']['config_revision'], 'c'*40)
             self.assertEqual(json.loads((root/'previous.json').read_text()), old)
             self.assertEqual(json.loads((root/'active.json').read_text())['candidate'], new)
             history = root/'releases/new.json'
@@ -96,6 +98,27 @@ class ProductionTests(unittest.TestCase):
             # Status is read-only and does not mutate immutable release history.
             prod.handle('status', {}, policy)
             self.assertEqual(history.read_bytes(), original)
+
+    def test_configuration_transition_needs_review_and_disables_automatic_rollback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old, new, policy, request = self.rollout_fixture(root)
+            from test_release import candidate as valid_candidate
+            new = valid_candidate()
+            new['source']['revision'] = 'b'*40
+            request['candidate'] = new
+            old['config_revision'] = 'd'*40
+            (root/'active.json').write_text(json.dumps(old))
+            with patch.object(prod, 'plan', return_value=(['docker','compose'], {}, {})):
+                with self.assertRaisesRegex(ValueError, 'Configuration transition'):
+                    prod.handle('plan', request, policy)
+                policy['compatible_config_transitions'] = [['d'*40, 'c'*40]]
+                self.assertEqual(prod.handle('plan', request, policy)['status'], 'ready')
+                with patch.object(prod, 'verify_images'), patch.object(prod, 'run'), patch.object(prod, 'health', return_value=False), patch.object(prod, 'compose') as compose:
+                    with self.assertRaisesRegex(ValueError, 'health checks'):
+                        prod.handle('deploy', request, policy)
+                    compose.assert_not_called()
+            self.assertEqual(json.loads((root/'active.json').read_text()), old)
 
     def test_failed_health_rolls_back_compatible_images_only(self):
         with tempfile.TemporaryDirectory() as tmp:

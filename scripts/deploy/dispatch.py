@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
+import uuid
 
 
 def main():
@@ -34,7 +36,23 @@ def main():
         except BlockingIOError:
             raise ValueError('Conflicting deployment is already running') from None
         module = __import__(environment)
-        result = module.handle(verb, request, policy)
+        from release import record_once
+        event = {'environment': environment, 'operation': verb,
+                 'operator': request.get('operator'), 'run_url': request.get('run_url'),
+                 'config_revision': request.get('config_revision'),
+                 'at_epoch': int(time.time())}
+        # Only audit allowlisted provenance, never the request body or secrets.
+        audit = Path('/var/lib/risklive-deploy/audit')
+        record_once(audit / (str(time.time_ns()) + '-' + uuid.uuid4().hex + '.json'),
+                    dict(event, status='started'))
+        try:
+            result = module.handle(verb, request, policy)
+        except Exception:
+            record_once(audit / (str(time.time_ns()) + '-' + uuid.uuid4().hex + '.json'),
+                        dict(event, status='failed'))
+            raise
+        record_once(audit / (str(time.time_ns()) + '-' + uuid.uuid4().hex + '.json'),
+                    dict(event, status='completed'))
         print(json.dumps(result, sort_keys=True))
 
 
