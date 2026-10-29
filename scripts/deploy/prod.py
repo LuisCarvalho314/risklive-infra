@@ -193,7 +193,9 @@ def handle(verb, request, policy):
         else:
             record_once(events / (str(time.time_ns()) + '.json'), {**event, 'event': 'health-failed-no-compatible-rollback'})
         raise
-    result = {**event, 'verified': True, 'status': 'healthy', 'model_sha256': config_hash(model)}
+    result = {**event, 'verified': True, 'status': 'healthy', 'model_sha256': config_hash(model),
+              'configuration': model,
+              'configuration_policy': {key: policy[key] for key in ('config_revision', 'app_root', 'app_revision', 'compose_files', 'files_sha256', 'reviewed_model_sha256', 'settings') if key in policy}}
     release_file = state / 'releases' / (candidate['release_id'] + '.json')
     if not release_file.exists():
         record_once(release_file, result)

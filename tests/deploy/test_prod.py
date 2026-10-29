@@ -85,6 +85,8 @@ class ProductionTests(unittest.TestCase):
             with patch.object(prod, 'plan', return_value=(['docker','compose'], {}, {})), patch.object(prod, 'verify_images'), patch.object(prod, 'run', return_value=''), patch.object(prod, 'health', return_value=True), patch.object(prod, 'scheduler_inventory'):
                 result = prod.handle('deploy', request, policy)
             self.assertTrue(result['verified'])
+            self.assertEqual(result['configuration'], {})
+            self.assertEqual(result['configuration_policy']['config_revision'], 'c'*40)
             self.assertEqual(json.loads((root/'previous.json').read_text()), old)
             self.assertEqual(json.loads((root/'active.json').read_text())['candidate'], new)
             history = root/'releases/new.json'
