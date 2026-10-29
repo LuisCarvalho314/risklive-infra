@@ -1,0 +1,102 @@
+name: Development deployment
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        type: string
+        required: true
+      candidate_run_id:
+        type: string
+        default: ''
+      config_revision:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: risklive-development-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy isolated development
+    runs-on: ubuntu-24.04
+    environment: development
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DEPLOY_ACTION: ${{ inputs.action }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      CONFIG_REVISION: ${{ inputs.config_revision }}
+      CANDIDATE_BRANCHES: ${{ vars.RISKLIVE_CANDIDATE_BRANCHES || format('main,develop,{0}', vars.RISKLIVE_DEVELOPMENT_BRANCH) }}
+      DEV_HOST: ${{ vars.DEV_SSH_HOST }}
+      DEV_USER: ${{ vars.DEV_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: LuisCarvalho314/risklive-infra
+          ref: ${{ inputs.config_revision }}
+          persist-credentials: false
+      - name: Validate fixed operation and configuration revision
+        run: |
+          python3 - <<'PY'
+          import os, re
+          assert os.environ['DEPLOY_ACTION'] in {'start', 'update', 'stop', 'redeploy', 'status'}
+          assert re.fullmatch('[0-9a-f]{40}', os.environ['CONFIG_REVISION'])
+          assert re.fullmatch('[A-Za-z0-9][A-Za-z0-9.-]*', os.environ['DEV_HOST'])
+          assert re.fullmatch('[a-z_][a-z0-9_-]*', os.environ['DEV_USER'])
+          if os.environ['DEPLOY_ACTION'] in {'start', 'update', 'redeploy'}:
+              assert re.fullmatch('[1-9][0-9]*', os.environ['CANDIDATE_RUN_ID'])
+          PY
+      - name: Fetch verified candidate from the application CI run
+        if: inputs.action != 'stop' && inputs.action != 'status'
+        run: python3 scripts/deploy/fetch_candidate.py "$CANDIDATE_RUN_ID" candidate.json
+      - name: Verify candidate against successful exact-source CI and create request
+        env:
+          OPERATOR: ${{ github.actor }}
+          OPERATOR_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, sys
+          sys.path.insert(0, 'scripts/deploy')
+          from release import validate_candidate
+          request = {'config_revision': os.environ['CONFIG_REVISION'],
+                     'operator': os.environ['OPERATOR'], 'run_url': os.environ['OPERATOR_RUN_URL']}
+          if os.environ['DEPLOY_ACTION'] in {'start', 'update', 'redeploy'}:
+              candidate = validate_candidate(json.loads(pathlib.Path('candidate.json').read_text()))
+              run_id = os.environ['CANDIDATE_RUN_ID']
+              assert candidate['ci']['run_id'] == run_id
+              request['candidate'] = candidate
+          pathlib.Path('request.json').write_text(json.dumps(request))
+          PY
+      - name: Configure dedicated SSH identity and pinned host identity
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/risklive-dev"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+      - name: Execute restricted development operation
+        run: |
+          ssh -i "$HOME/.ssh/risklive-dev" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$DEV_USER@$DEV_HOST" "$DEPLOY_ACTION" < request.json | tee deployment-result.json
+          python3 - <<'PY'
+          import json, os
+          result = json.load(open('deployment-result.json'))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: development-deployment-result
+          path: deployment-result.json
+          if-no-files-found: ignore
+      - name: Remove ephemeral SSH private key
+        if: always()
+        run: rm -f "$HOME/.ssh/risklive-dev"
