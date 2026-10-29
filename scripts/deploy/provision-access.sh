@@ -7,6 +7,7 @@ root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 install -d -m 0755 /usr/local/lib/risklive-deploy /etc/risklive-deploy
 install -d -m 0700 /var/lib/risklive-deploy
 install -m 0644 "$root"/scripts/deploy/*.py /usr/local/lib/risklive-deploy/
+install -m 0644 "$root/scripts/release/preflight.py" /usr/local/lib/risklive-deploy/preflight.py
 for env in dev prod; do
   user="risklive-deploy-$env"
   id "$user" >/dev/null 2>&1 || useradd --create-home --shell /bin/sh "$user"
