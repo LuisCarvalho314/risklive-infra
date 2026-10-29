@@ -73,8 +73,63 @@ def render(d, root, settings):
     return json.loads(run(args, env=env, cwd=root))
 
 
+def check_runtime_model(config, data_root, environment_files, caddy_file, http_bind,
+                        *, strict_scheduler=False):
+    """Semantic storage/access invariants shared by historical and live preflight.
+
+    A reviewed hash cannot authorise path, mount-permission or host-access drift.
+    This validator reads no environment contents and performs no Docker mutation.
+    """
+    require(config.get('name') == 'risklive-prod' and set(config.get('services', {})) == SERVICES,
+            'Production runtime service/project mismatch')
+    data = canonical(data_root)
+    caddy = canonical(caddy_file)
+    networks = config.get('networks', {})
+    require('internal' in networks and networks['internal'].get('name') == 'risklive-prod_internal', 'Production network mismatch')
+    require(set(networks).issubset({'internal', 'analytics'}), 'Unexpected production network')
+    if 'analytics' in networks:
+        require(networks['analytics'].get('internal') is True and networks['analytics'].get('name') == 'risklive-prod_analytics', 'Analytics must be an isolated internal network')
+    for name, svc in config['services'].items():
+        require(not any(svc.get(key) for key in ('build','container_name','privileged','network_mode','pid','ipc','devices','cap_add')),
+                'Unsafe runtime host access: ' + name)
+        require(not svc.get('volumes_from'), 'Inherited mounts forbidden: ' + name)
+        expected_networks = {'internal'}
+        if name == 'caddy' and 'analytics' in svc.get('networks', {}):
+            expected_networks.add('analytics')
+        require(set(svc.get('networks', {})) == expected_networks, 'Service runtime network mismatch: ' + name)
+        envfiles = [v['path'] if isinstance(v, dict) else v for v in svc.get('env_file', [])]
+        require(envfiles == [environment_files['app' if name == 'scheduler' else name]], 'Runtime environment path mismatch: ' + name)
+        mounts = svc.get('volumes', [])
+        volumes = {m['target']: m for m in mounts}
+        require(len(volumes) == len(mounts), 'Duplicate runtime mount target')
+        if name == 'caddy':
+            require(set(volumes) == {'/etc/caddy/Caddyfile','/data','/config'}, 'Caddy runtime mount inventory mismatch')
+            mount = volumes['/etc/caddy/Caddyfile']
+            require(mount.get('type') == 'bind' and mount.get('source') == str(caddy) and mount.get('read_only') is True, 'Caddy runtime configuration mount mismatch')
+            for target, logical in (('/data','caddy_data'),('/config','caddy_config')):
+                m = volumes[target]
+                require(m.get('type') == 'volume' and m.get('source') == logical and not m.get('read_only'), 'Caddy runtime persistent volume mismatch')
+                require(config.get('volumes', {}).get(logical, {}).get('name') == 'risklive-prod_' + logical, 'Caddy runtime named volume identity mismatch')
+            host, port = http_bind.rsplit(':', 1)
+            ports = svc.get('ports', [])
+            require(len(ports) == 1 and ports[0].get('host_ip') == host and str(ports[0].get('published')) == port and ports[0].get('target') == 80 and ports[0].get('protocol', 'tcp') == 'tcp', 'Production runtime ingress mismatch')
+        else:
+            require(not svc.get('ports'), 'Unexpected runtime published port: ' + name)
+            parts = ['results','logs'] + (['runtime'] if name != 'web' else [])
+            require(set(volumes) == {'/app/' + part for part in parts}, 'Runtime persistent mount inventory mismatch: ' + name)
+            for part in parts:
+                m = volumes['/app/' + part]
+                require(m.get('type') == 'bind' and m.get('source') == str(canonical(str(data / part))), 'Runtime persistent mount source mismatch: ' + name)
+                require(m.get('read_only', False) == (name == 'web'), 'Runtime persistent mount permissions mismatch: ' + name)
+        if name == 'scheduler' and strict_scheduler:
+            require(svc.get('command') == ['python','-m','app.scheduler'], 'Unexpected production scheduler command')
+            require(svc.get('deploy', {}).get('replicas', 1) == 1, 'Production scheduler must have exactly one replica')
+
+
 def check_model(release, d, config, settings):
     prod = release['production']
+    check_runtime_model(config, prod['data_root'], prod['environment_files'],
+                        str(Path(d['checkout']) / d['caddy_file']), prod['http_bind'])
     require(PLATFORM.fullmatch(d.get('platform', '')), 'Unsupported deployment platform')
     require(set(prod['images']) == SERVICES, 'Unexpected image inventory')
     require(settings['COMPOSE_PROJECT_NAME'] == release['project'] == 'risklive-prod', 'Production project identity mismatch')

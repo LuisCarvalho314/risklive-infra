@@ -8,7 +8,7 @@ import re
 import subprocess
 import time
 from urllib.request import urlopen
-from preflight import canonical
+from preflight import canonical, check_runtime_model
 from release import (validate_candidate, require, config_hash, validate_revision,
                      candidate_identity, validate_dev_evidence, atomic_json, record_once)
 
@@ -41,7 +41,9 @@ def compatible(current, target, policy):
 
 def compose(policy, candidate):
     root = trusted(policy['app_root'])
-    revision = run(['git', '-C', str(root), 'rev-parse', 'HEAD']).strip()
+    trusted(str(root / '.git'))
+    trusted(str(root / '.git/config'))
+    revision = run(['git', '-c', 'core.fsmonitor=false', '-C', str(root), 'rev-parse', 'HEAD']).strip()
     require(revision == policy['app_revision'], 'Pinned configuration checkout changed')
     settings = dict(policy['settings'])
     settings.update(APP_IMAGE=candidate['images']['app'], WEB_IMAGE=candidate['images']['web'])
@@ -56,11 +58,15 @@ def compose(policy, candidate):
         p = canonical(str(Path('/opt/risklive/data') / part))
         require(p.is_dir() and p.resolve() == p, 'Production persistent storage missing or symlinked')
     args = ['docker', 'compose', '--env-file', '/dev/null', '--project-name', 'risklive-prod']
-    for name in policy['compose_files']:
+    caddy_name = policy.get('caddy_file', 'deployment/caddy/Caddyfile.prod')
+    require(caddy_name in policy['files_sha256'], 'Caddyfile content must be pinned')
+    for name in policy['files_sha256']:
+        require(not Path(name).is_absolute() and '..' not in Path(name).parts, 'Unsafe pinned production configuration path')
         p = trusted(str(root / name))
         import hashlib
         require(hashlib.sha256(p.read_bytes()).hexdigest() == policy['files_sha256'][name], 'Compose file drift')
-        args += ['-f', str(p)]
+        if name in policy['compose_files']:
+            args += ['-f', str(p)]
     env = {'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': '/root', **settings}
     model = json.loads(run(args + ['config', '--no-env-resolution', '--format', 'json'], env=env))
     require(model.get('name') == 'risklive-prod' and set(model['services']) == SERVICES, 'Unexpected production services')
@@ -72,6 +78,9 @@ def compose(policy, candidate):
     for service in ('app', 'scheduler', 'web'):
         normalized['services'][service]['image'] = '<candidate>'
     require(config_hash(normalized) == policy['reviewed_model_sha256'], 'Exact production Compose model is not reviewed')
+    check_runtime_model(model, '/opt/risklive/data',
+                        {role: settings[role.upper() + '_ENV_FILE'] for role in ('app','web','caddy')},
+                        str(root / caddy_name), '0.0.0.0:8888', strict_scheduler=True)
     for service in model['services'].values():
         require(not service.get('build') and not service.get('container_name'), 'Build/fixed container names forbidden')
     require('@sha256:' in model['services']['caddy']['image'], 'Caddy must be digest pinned in reviewed host overlay')
@@ -195,7 +204,7 @@ def handle(verb, request, policy):
         raise
     result = {**event, 'verified': True, 'status': 'healthy', 'model_sha256': config_hash(model),
               'configuration': model,
-              'configuration_policy': {key: policy[key] for key in ('config_revision', 'app_root', 'app_revision', 'compose_files', 'files_sha256', 'reviewed_model_sha256', 'settings') if key in policy}}
+              'configuration_policy': {key: policy[key] for key in ('config_revision', 'app_root', 'app_revision', 'compose_files', 'files_sha256', 'reviewed_model_sha256', 'settings', 'caddy_file') if key in policy}}
     release_file = state / 'releases' / (candidate['release_id'] + '.json')
     if not release_file.exists():
         record_once(release_file, result)

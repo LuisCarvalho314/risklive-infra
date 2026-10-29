@@ -15,7 +15,13 @@ def prepare(model, template):
         normalized['services'][role]['image'] = '<candidate>'
     template['reviewed_model_sha256'] = hashlib.sha256(json.dumps(normalized,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     root = Path(template['app_root'])
-    template['files_sha256'] = {name: hashlib.sha256((root/name).read_bytes()).hexdigest() for name in template['compose_files']}
+    caddy_file = template.get('caddy_file', 'deployment/caddy/Caddyfile.prod')
+    template['caddy_file'] = caddy_file
+    names = list(dict.fromkeys([*template['compose_files'], caddy_file]))
+    for name in names:
+        if Path(name).is_absolute() or '..' in Path(name).parts:
+            raise ValueError('Pinned configuration paths must stay within app checkout')
+    template['files_sha256'] = {name: hashlib.sha256((root/name).read_bytes()).hexdigest() for name in names}
     template['initial_cutover_approved'] = False
     template['legacy_state_compatibility_verified'] = False
     return template

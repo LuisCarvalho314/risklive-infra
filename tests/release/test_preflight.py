@@ -87,6 +87,30 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.check()
 
+    def test_shared_runtime_semantics_reject_drift_even_with_rehashed_policy(self):
+        def validate():
+            p.check_runtime_model(self.c, self.r['production']['data_root'],
+                                  self.r['production']['environment_files'],
+                                  str(Path(self.d['checkout']) / self.d['caddy_file']),
+                                  self.r['production']['http_bind'])
+        validate()
+        original = copy.deepcopy(self.c)
+        mutations = [
+            lambda: self.c['services']['app']['volumes'][0].update(source='/tmp/rehashed'),
+            lambda: self.c['services']['web']['volumes'][0].update(read_only=False),
+            lambda: self.c['services']['app'].update(privileged=True),
+            lambda: self.c['services']['scheduler'].update(network_mode='host'),
+            lambda: self.c['services']['caddy']['volumes'][0].update(read_only=False),
+            lambda: self.c['volumes']['caddy_data'].update(name='another-project-data'),
+            lambda: self.c['services']['web'].update(ports=[{'published':'8188','target':3000}]),
+        ]
+        for mutate in mutations:
+            self.c = copy.deepcopy(original)
+            mutate()
+            self.rehash()
+            with self.assertRaises(ValueError):
+                validate()
+
     def test_missing_environment(self):
         Path(self.r['production']['environment_files']['web']).unlink()
         with self.assertRaisesRegex(ValueError, 'Environment file missing'):
