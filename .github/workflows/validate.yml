@@ -1,0 +1,30 @@
+name: Infrastructure validation
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Infrastructure hygiene and secret scan
+        run: |
+          python scripts/baseline.py --staged
+          python scripts/security/scan.py
+      - name: Offline infrastructure tests
+        run: |
+          for suite in tests/*; do
+            [ ! -d "$suite" ] || python -m unittest discover -s "$suite" -p 'test_*.py' -v
+          done
+      - name: Shell syntax
+        run: |
+          while IFS= read -r script; do bash -n "$script"; done < <(git ls-files '*.sh')

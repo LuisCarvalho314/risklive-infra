@@ -1,3 +1,11 @@
 #!/bin/sh
 set -eu
-exec python3 -I scripts/baseline.py --staged
+python3 -I scripts/baseline.py --staged
+# Run the indexed scanner, so an unstaged replacement cannot hide findings.
+if git cat-file -e :scripts/security/scan.py 2>/dev/null; then
+    umask 077
+    scan_source=$(mktemp "${TMPDIR:-/tmp}/risklive-index-scan.XXXXXXXX.py")
+    trap 'rm -f "$scan_source"' EXIT HUP INT TERM
+    git show :scripts/security/scan.py > "$scan_source"
+    python3 -I "$scan_source" --repo "$(git rev-parse --show-toplevel)"
+fi

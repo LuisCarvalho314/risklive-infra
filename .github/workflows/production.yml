@@ -1,0 +1,165 @@
+name: Production deployment
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [plan, deploy, rollback]
+        default: plan
+        required: true
+      candidate_run_id:
+        description: Successful application CI run ID (deploy/plan)
+        required: false
+        type: string
+      release_id:
+        description: Previously verified release ID (rollback)
+        required: false
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: risklive-production
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production-plan
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Fetch exact tested candidate
+        if: inputs.operation != 'rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_BRANCHES: ${{ vars.CANDIDATE_BRANCHES || 'main,develop' }}
+        run: python3 scripts/deploy/fetch_candidate.py "$RUN_ID" "$RUNNER_TEMP/candidate.json"
+      - name: Prepare fixed deployment request
+        env:
+          OPERATION: ${{ inputs.operation }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          CONFIG_REVISION: ${{ github.sha }}
+          OPERATOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          operation = os.environ['OPERATION']
+          request = {k.lower(): os.environ[k] for k in ('CONFIG_REVISION','OPERATOR','RUN_URL')}
+          if operation == 'rollback':
+              release_id = os.environ['RELEASE_ID']
+              if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', release_id):
+                  raise SystemExit('Invalid rollback release ID')
+              request['release_id'] = release_id
+          else:
+              request['candidate'] = json.loads((root / 'candidate.json').read_text())
+          (root / 'request.json').write_text(json.dumps(request))
+          PY
+      - name: Validate exact production host plan before approval
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          OPERATION: plan
+        run: |
+          umask 077
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/deploy-key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/known-hosts"
+          case "$OPERATION" in plan|deploy|rollback) ;; *) exit 1;; esac
+          case "$DEPLOY_HOST" in ''|*[!a-zA-Z0-9.-]*) exit 1;; esac
+          test "$DEPLOY_USER" = risklive-deploy-prod-plan
+          ssh -i "$RUNNER_TEMP/deploy-key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/known-hosts" "$DEPLOY_USER@$DEPLOY_HOST" "$OPERATION" < "$RUNNER_TEMP/request.json" | tee "$RUNNER_TEMP/deployment-result.json"
+      - name: Record deployment result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/deployment-result.json
+          if-no-files-found: ignore
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy-key" "$RUNNER_TEMP/known-hosts"
+  deployment:
+    needs: prepare
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation != 'plan'
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify production approval configuration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          OPERATOR: ${{ github.actor }}
+        run: |
+          gh api "repos/$REPO/environments/production" > "$RUNNER_TEMP/production-environment.json"
+          gh api "repos/$REPO/actions/runs/$RUN_ID/approvals" > "$RUNNER_TEMP/production-approvals.json"
+          python3 scripts/deploy/approval.py "$RUNNER_TEMP/production-environment.json" "$RUNNER_TEMP/production-approvals.json" "$OPERATOR"
+      - name: Fetch exact tested candidate
+        if: inputs.operation != 'rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_BRANCHES: ${{ vars.CANDIDATE_BRANCHES || 'main,develop' }}
+        run: python3 scripts/deploy/fetch_candidate.py "$RUN_ID" "$RUNNER_TEMP/candidate.json"
+      - name: Prepare fixed deployment request
+        env:
+          OPERATION: ${{ inputs.operation }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          CONFIG_REVISION: ${{ github.sha }}
+          OPERATOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          operation = os.environ['OPERATION']
+          request = {k.lower(): os.environ[k] for k in ('CONFIG_REVISION','OPERATOR','RUN_URL')}
+          if operation == 'rollback':
+              release_id = os.environ['RELEASE_ID']
+              if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', release_id):
+                  raise SystemExit('Invalid rollback release ID')
+              request['release_id'] = release_id
+          else:
+              request['candidate'] = json.loads((root / 'candidate.json').read_text())
+          (root / 'request.json').write_text(json.dumps(request))
+          PY
+      - name: Execute approved fixed host operation
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          umask 077
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/deploy-key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/known-hosts"
+          case "$OPERATION" in plan|deploy|rollback) ;; *) exit 1;; esac
+          case "$DEPLOY_HOST" in ''|*[!a-zA-Z0-9.-]*) exit 1;; esac
+          test "$DEPLOY_USER" = risklive-deploy-prod
+          ssh -i "$RUNNER_TEMP/deploy-key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/known-hosts" "$DEPLOY_USER@$DEPLOY_HOST" "$OPERATION" < "$RUNNER_TEMP/request.json" | tee "$RUNNER_TEMP/deployment-result.json"
+      - name: Record deployment result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-deployment-${{ github.run_id }}
+          path: ${{ runner.temp }}/deployment-result.json
+          if-no-files-found: ignore
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy-key" "$RUNNER_TEMP/known-hosts"
