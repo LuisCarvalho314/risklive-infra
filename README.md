@@ -1,6 +1,8 @@
 # RiskLive infrastructure on jarvis
 
-Private infrastructure baseline; local Git only, with no remote configured.
+Infrastructure baseline with local hardening branches. GitHub metadata on
+2026-10-29 reports both RiskLive repositories as **public**; an `origin` remote
+is configured. No pushes or visibility changes are authorised by this work.
 This repository owns host settings, release inventory, a Caddy bind-path override,
 read-only operational checks and reconstruction instructions. The `risklive`
 application repository continues to own Dockerfiles, CI, service Compose files,
@@ -50,5 +52,20 @@ all paths except the explicit baseline allowlist; the local pre-commit hook also
 checks staged paths, file types and common secret patterns. Manual staged review
 remains necessary; force-add and bypassed hooks can defeat these protections.
 
-No hosted repository exists yet. If publishing is later authorised, create a
-**private** `risklive-infra` remote and verify its visibility before pushing.
+Before any approved publication, review the tracked operational inventory and
+reachable history, and verify the intended destination and access policy.
+Existing local Caddy/development revisions are not recoverable from GitHub.
+
+Hardening tools and runbooks:
+
+- [Git/security audit and preservation](docs/security/audit.md)
+- [Image provenance and recovery](docs/images/recovery.md)
+- [Backup and restore validation](docs/backup/recovery.md)
+- [Release preflight and migration](docs/deployment/release-management.md)
+- [Rollback](docs/deployment/rollback.md)
+- [CI/CD proposal](docs/cicd/architecture.md)
+- [Consolidated validation and remaining gaps](docs/integration/report.md)
+
+The baseline check validates historical reconstruction. Deployment preflight is
+a separate promotion gate and intentionally rejects the unverified historical
+release. Synthetic backup tests do not establish production recoverability.

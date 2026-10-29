@@ -12,9 +12,9 @@ platform. Preserve the existing HTTP ingress on 8888 and its intended external
 Azure/firewall/DNS routing; those external rules have not been inventoried here.
 Host Caddy and caddy-api remain disabled/inactive when using container Caddy.
 
-Clone this infrastructure repository separately. Before any future push, its
-hosted remote must be private. No remote has been created or configured by this
-baseline. In each infrastructure clone enable its local guard:
+Clone this infrastructure repository separately. GitHub currently reports it as public,
+and an origin remote already exists. Before any approved publication, review
+reachable history and verify the intended destination and access policy. In each infrastructure clone enable its local guard:
 
 ```bash
 git config core.hooksPath .githooks
@@ -147,5 +147,5 @@ The explicit ignore allowlist and pre-commit hook block ordinary staging of new
 secrets/runtime/application paths. Review `git diff --cached --stat` and
 `git diff --cached` before every commit. A new infrastructure file requires an
 intentional update to both `.gitignore` and the validator allowlist. Do not use
-force-add or bypass hooks for secret files. The initial baseline is local only;
-there is no push or merge in this task.
+force-add or bypass hooks for secret files. The hardening branches remain local;
+there is no push or merge to main in this task.

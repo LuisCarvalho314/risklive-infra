@@ -10,13 +10,36 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED = {
+REQUIRED = {
     '.gitignore', '.githooks/pre-commit', 'README.md', 'release.json',
     'docs/discovery.md', 'docs/reconstruction.md', 'docs/verification.md',
     'hosts/jarvis/deployment.env.example', 'hosts/jarvis/app.env.example',
     'hosts/jarvis/web.env.example', 'hosts/jarvis/compose.override.yml',
     'scripts/baseline.py', 'scripts/inspect-live.sh',
 }
+
+# Reviewed hardening paths are optional on independent implementation branches.
+ALLOWED = REQUIRED | {
+    'docs/security/audit.md',
+    'scripts/security/scan.py',
+    'tests/security/test_scan.py',
+    'scripts/images/validate.py',
+    'tests/images/test_images.py',
+    'docs/images/recovery.md',
+    'scripts/backup/recovery.py',
+    'tests/backup/test_recovery.py',
+    'docs/backup/recovery.md',
+    'scripts/release/preflight.py',
+    'tests/release/test_preflight.py',
+    'docs/deployment/release-management.md',
+    'docs/deployment/rollback.md',
+    'docs/cicd/architecture.md',
+    'docs/cicd/promotion.md',
+    'docs/cicd/candidate-build.yml.example',
+    'tests/integration/test_hygiene.py',
+    'docs/integration/report.md',
+}
+
 
 
 def require(condition, message):
@@ -29,23 +52,21 @@ def command(args, **kwargs):
 
 
 def hygiene(staged=False):
-    if staged:
-        entries = command(['git', '-C', str(ROOT), 'ls-files', '--stage', '-z']).split(b'\0')
-        files = {}
-        for entry in filter(None, entries):
-            meta, name = entry.split(b'\t', 1)
-            mode, oid, stage = meta.split()
-            name = name.decode()
-            require(mode in (b'100644', b'100755') and stage == b'0', 'Unsafe index entry: ' + name)
-            require(name in ALLOWED, 'Unapproved staged path: ' + name)
+    entries = command(['git', '-C', str(ROOT), 'ls-files', '--stage', '-z']).split(b'\0')
+    files = {}
+    for entry in filter(None, entries):
+        meta, name = entry.split(b'\t', 1)
+        mode, oid, stage = meta.split()
+        name = name.decode()
+        require(mode in (b'100644', b'100755') and stage == b'0', 'Unsafe index entry: ' + name)
+        require(name in ALLOWED, 'Unapproved tracked path: ' + name)
+        if staged:
             files[name] = command(['git', '-C', str(ROOT), 'cat-file', 'blob', oid.decode()])
-    else:
-        files = {}
-        for name in ALLOWED:
+        else:
             path = ROOT / name
-            require(not path.is_symlink(), 'Symlink forbidden: ' + name)
+            require(not any(p.is_symlink() for p in (path, *path.parents)), 'Symlink forbidden: ' + name)
             files[name] = path.read_bytes()
-    require(set(files) == ALLOWED, 'Baseline files missing from worktree/index')
+    require(REQUIRED.issubset(files), 'Baseline files missing from worktree/index')
     credential = re.compile(r'\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})')
     assignment = re.compile(r'^\s*(?:export\s+)?([A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD|HASH)[A-Z0-9_]*)\s*=\s*(.*?)\s*$', re.M)
     for name, data in files.items():
