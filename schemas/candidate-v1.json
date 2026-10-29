@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "risklive-candidate-v1",
+  "title": "RiskLive immutable candidate",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "source",
+    "images",
+    "ci",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "release_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repository",
+        "revision",
+        "seca_revision"
+      ],
+      "properties": {
+        "repository": {
+          "const": "LuisCarvalho314/risklive"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "seca_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "web"
+      ],
+      "properties": {
+        "app": {
+          "type": "string",
+          "pattern": "^ghcr\\.io/luiscarvalho314/risklive-app@sha256:[0-9a-f]{64}$"
+        },
+        "web": {
+          "type": "string",
+          "pattern": "^ghcr\\.io/luiscarvalho314/risklive-web@sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "required": [
+        "conclusion",
+        "run_id",
+        "run_url"
+      ],
+      "properties": {
+        "conclusion": {
+          "const": "success"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "run_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/LuisCarvalho314/risklive/actions/runs/[1-9][0-9]*$"
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": [
+        "compatibility"
+      ],
+      "properties": {
+        "compatibility": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        }
+      }
+    }
+  }
+}
